@@ -26,7 +26,7 @@ Easily install macOS on Proxmox VE with just a few steps! This guide provides th
 ```
 or
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/devstroop/OSX-PROXMOX/refs/heads/mod/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/devstroop/OSX-PROXMOX/refs/heads/main/install.sh)"
 ```
 
 🎉 Voilà! You can now install macOS!
