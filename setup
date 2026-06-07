@@ -378,8 +378,11 @@ download_recovery_image() {
   mount "$loopdev" /mnt/APPLE >>"$logfile" 2>&1 || log_and_exit "Failed to mount image" "$logfile"
   cd /mnt/APPLE
   local recovery_args="-b $board_id -m $model_id download"
-  [[ "$version_name" == "Sequoia" ]] && recovery_args="$recovery_args -os latest"
+  [[ "$version_name" =~ ^(Sonoma|Sequoia)$ ]] && recovery_args="$recovery_args -os latest"
   python3 "${SCRIPT_DIR}/tools/macrecovery/macrecovery.py" $recovery_args >>"$logfile" 2>&1 || log_and_exit "Failed to download recovery" "$logfile"
+  # For Sonoma and Sequoia, also attempt to download full recovery payload for SSV boot
+  # The BaseSystem alone works when csr-active-config has ALLOW_UNAUTHENTICATED_ROOT set
+  # (configured in the patched OpenCore ISO from devstroop/OSX-PROXMOX)
   cd "$SCRIPT_DIR"
   umount /mnt/APPLE >>"$logfile" 2>&1 || log_and_exit "Failed to unmount image" "$logfile"
   losetup -d "$loopdev" >>"$logfile" 2>&1 || log_and_exit "Failed to detach loop device" "$logfile"
@@ -397,9 +400,10 @@ create_vm() {
   fi
   [[ ! -d "/sys/class/net/$bridge" ]] && log_and_exit "Bridge $bridge does not exist" "$logfile"
 
-  local cpu_args device_args='-device isa-applesmc,osk="ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc" -smbios type=2'
+  local cpu_args tablet_arg=1 device_args='-device isa-applesmc,osk="ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc" -smbios type=2'
   if [[ "$version_name" =~ ^(Sonoma|Sequoia)$ ]]; then
     device_args="$device_args -device qemu-xhci -device usb-kbd -device usb-tablet -global nec-usb-xhci.msi=off"
+    tablet_arg=0
   else
     device_args="$device_args -device usb-kbd,bus=ehci.0,port=2 -device usb-mouse,bus=ehci.0,port=3"
   fi
@@ -423,7 +427,7 @@ create_vm() {
     --cores "$core_count" --description "Hackintosh VM - $version_name" \
     --efidisk0 "${storage}:4" --machine q35 --memory "$ram_size" \
     --name "$vm_name" --net0 "vmxnet3,bridge=$bridge" --numa 0 \
-    --onboot 0 --ostype other --sockets 1 --start 0 --tablet 1 \
+    --onboot 0 --ostype other --sockets 1 --start 0 --tablet $tablet_arg \
     --vga vmware --vmgenid 1 --scsihw virtio-scsi-pci \
     --"$disk_type" "${storage}:${disk_size},cache=none,discard=on" \
     --ide0 "${storage_iso}:iso/${iso_file},media=cdrom,cache=unsafe,size=96M" \
@@ -846,7 +850,7 @@ customize_opencore_config() {
 update_opencore_iso() {
   local iso_path
   local logfile="${LOGDIR}/update-opencore-iso.log"
-  local iso_url="https://github.com/luchina-gabriel/OSX-PROXMOX/raw/main/EFI/opencore-osx-proxmox-vm.iso"
+  local iso_url="https://github.com/devstroop/OSX-PROXMOX/raw/main/EFI/opencore-osx-proxmox-vm.iso"
   iso_path="${ISODIR}/${OPENCORE_ISO}"
   oc_json_path="${ISODIR}/.smbios.json"
 
